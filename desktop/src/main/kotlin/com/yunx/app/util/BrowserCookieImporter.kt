@@ -43,8 +43,14 @@ object BrowserCookieImporter {
         else -> emptyList()
     }
 
+    /** [macOS 移植] 本导入方案依赖 Windows DPAPI 与 %LOCALAPPDATA% 路径，非 Windows 不可用 */
+    private fun isWindows(): Boolean =
+        System.getProperty("os.name").orEmpty().lowercase().contains("win")
+
     /** 发现本机已安装浏览器的 Cookie 库目录（存在 cookies 文件才算） */
     fun discoverBrowsers(): List<BrowserInfo> {
+        // [macOS 移植] 非 Windows：直接返回空（界面表现为「未发现浏览器」），不触碰 DPAPI
+        if (!isWindows()) return emptyList()
         val local = System.getenv("LOCALAPPDATA")?.let { File(it) } ?: return emptyList()
         val roaming = System.getenv("APPDATA")?.let { File(it) } ?: return emptyList()
         val out = mutableListOf<BrowserInfo>()
@@ -145,6 +151,8 @@ object BrowserCookieImporter {
      * - 无前缀（个别旧版）→ 直接按 DPAPI 尝试。
      */
     private fun decryptChromiumValue(bytes: ByteArray): String? {
+        // [macOS 移植] 解密靠 Windows DPAPI（Crypt32），非 Windows 直接返回不可用
+        if (!isWindows()) return null
         if (bytes.size < 3) return null
         var offset = 0
         if (bytes[0] == 'v'.code.toByte() &&
