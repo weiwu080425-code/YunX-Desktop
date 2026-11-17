@@ -623,9 +623,8 @@ struct GuangYaSectionView: View {
             var token = store.guangyaAccessToken
             var info = await GuangYaAPI.shared.fetchAccountInfo(accessToken: token, device: device)
             if info == nil, !store.guangyaRefreshToken.isEmpty,
-               let refreshed = try? await GuangYaAPI.shared.refreshToken(
-                   refreshToken: store.guangyaRefreshToken, device: device),
-               let tokens = refreshed {
+               let tokens = try? await GuangYaAPI.shared.refreshToken(
+                   refreshToken: store.guangyaRefreshToken, device: device) {
                 // 刷新成功后落库并重试一次
                 store.guangyaAccessToken = tokens.accessToken
                 store.guangyaRefreshToken = tokens.refreshToken
