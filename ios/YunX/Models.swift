@@ -1,10 +1,72 @@
 import Foundation
 
+/// 支持的网盘平台（对应 Kotlin ShareLinkParser 的平台路由）
+enum SharePlatform {
+    case quark
+    case baidu
+    case uc
+    case xunlei
+    case pan123
+    case pan115
+    case c139
+    case guangya
+    case lanzou
+    case ilanzou
+    case github
+    case starsea
+
+    var displayName: String {
+        switch self {
+        case .quark: return "夸克网盘"
+        case .baidu: return "百度网盘"
+        case .uc: return "UC 网盘"
+        case .xunlei: return "迅雷云盘"
+        case .pan123: return "123 云盘"
+        case .pan115: return "115 网盘"
+        case .c139: return "139 移动云盘"
+        case .guangya: return "光鸭云盘"
+        case .lanzou: return "蓝奏云"
+        case .ilanzou: return "蓝奏优享"
+        case .github: return "GitHub"
+        case .starsea: return "星海口令"
+        }
+    }
+
+    var shortName: String {
+        switch self {
+        case .quark: return "夸克"
+        case .baidu: return "百度"
+        case .uc: return "UC"
+        case .xunlei: return "迅雷"
+        case .pan123: return "123"
+        case .pan115: return "115"
+        case .c139: return "139"
+        case .guangya: return "光鸭"
+        case .lanzou: return "蓝奏"
+        case .ilanzou: return "蓝奏优享"
+        case .github: return "GitHub"
+        case .starsea: return "星海"
+        }
+    }
+
+    /// 分享根目录的目录键（各平台列目录接口的根 fid 语义不同）：
+    /// 百度用空串；139 用 "root"；光鸭用空串（rootParentId）；GitHub 的根 fid 由 open() 返回、不走此键；
+    /// 蓝奏单层无目录键；其余用 "0"。
+    var rootDirKey: String {
+        switch self {
+        case .baidu, .guangya: return ""
+        case .c139: return "root"
+        case .quark, .uc, .xunlei, .pan123, .pan115, .lanzou, .ilanzou, .github, .starsea: return "0"
+        }
+    }
+}
+
 /// 分享解析会话（一次解析流程的凭证），对应 Kotlin ShareSession
 struct ShareSession {
     let shareId: String
     let stoken: String
     let title: String
+    let platform: SharePlatform
 }
 
 /// 分享 Token 响应，对应 Kotlin ShareToken
