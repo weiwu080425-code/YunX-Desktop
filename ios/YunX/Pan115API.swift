@@ -831,8 +831,13 @@ final class Pan115API {
             throw Wave2Error("请先登录115网盘")
         }
         let root = try await listFiles(cid: Pan115API.rootCid, cookie: cookie, offset: 0)
-        let tempRoot = root.files.first(where: { $0.isdir && $0.fname == Pan115API.tempDirName })?.fid
-            ?? (try await createDir(pid: Pan115API.rootCid, name: Pan115API.tempDirName, cookie: cookie))
+        let existingRoot = root.files.first(where: { $0.isdir && $0.fname == Pan115API.tempDirName })?.fid
+        let tempRoot: String
+        if let existingRoot {
+            tempRoot = existingRoot
+        } else {
+            tempRoot = try await createDir(pid: Pan115API.rootCid, name: Pan115API.tempDirName, cookie: cookie)
+        }
         let subName = "\(Pan115API.tempSubdirPrefix)\(Int(Date().timeIntervalSince1970 * 1_000_000_000))"
         return try await createDir(pid: tempRoot, name: subName, cookie: cookie)
     }
