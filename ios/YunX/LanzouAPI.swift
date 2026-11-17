@@ -298,7 +298,7 @@ final class LanzouAPI {
             while attempt <= 2 {
                 do {
                     json = try await formPost(
-                        url: "\(page.baseUrl)/filemoreajax.php",
+                        "\(page.baseUrl)/filemoreajax.php",
                         fields: [
                             ("lx", params.lx), ("fid", params.fid), ("t", params.t), ("k", params.k),
                             ("pwd", pwd ?? ""), ("pg", "\(pg)")
@@ -682,7 +682,7 @@ final class LanzouAPI {
                           origin: String, cookie: String?) async throws -> [String: Any] {
         let body = try await formPostRaw(url, fields: fields, referer: referer, origin: origin, cookie: cookie)
         guard let json = wJSONObj(body) else {
-            if body.trimmingCharacters(in: .whitespaces).hasPrefix("<") {
+            if (String(data: body, encoding: .utf8) ?? "").trimmingCharacters(in: .whitespaces).hasPrefix("<") {
                 throw Wave2Error("蓝奏返回了验证页面，请稍后重试或在分享页完成验证")
             }
             throw Wave2Error("蓝奏解析服务响应异常，请稍后重试")
