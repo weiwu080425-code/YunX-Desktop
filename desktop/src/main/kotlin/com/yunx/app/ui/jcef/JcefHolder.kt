@@ -52,7 +52,28 @@ object JcefHolder {
     @Volatile
     private var crashRecoveryDone = false
 
+    /** [macOS 移植] 精简版只在 Windows 上启用内嵌浏览器（CEF 原生库只有 Windows 版） */
+    private fun isWindowsPlatform(): Boolean =
+        System.getProperty("os.name").orEmpty().lowercase().contains("win")
+
+    /**
+     * [macOS 移植] 非 Windows 平台直接降级：置 [initFailure] 并返回，登录页据此
+     * 自动使用手动粘贴 Cookie 模式，不尝试加载不存在的 CEF 原生库、不会崩溃。
+     * @return true = 已降级处理，调用方应立即返回
+     */
+    private fun degradeIfUnsupported(): Boolean {
+        if (isWindowsPlatform()) return false
+        if (initFailure == null) {
+            initFailure = UnsupportedOperationException(
+                "内嵌浏览器（JCEF）在当前系统不可用（macOS 精简版未带 CEF 原生库），请使用手动粘贴 Cookie 登录"
+            )
+        }
+        Log.w(TAG, "JCEF disabled on non-Windows platform, fallback to paste mode")
+        return true
+    }
+
     fun initBlocking() {
+        if (degradeIfUnsupported()) return
         synchronized(lock) {
             if (browserReady) return
             var lastError: Throwable? = null
@@ -106,6 +127,7 @@ object JcefHolder {
      * 完成后 [browserReady] 置为 true，登录页自动切换为内嵌浏览器模式。
      */
     fun initInBackground() {
+        if (degradeIfUnsupported()) return
         synchronized(lock) {
             if (browserReady) return
             if (initThread?.isAlive == true) return
