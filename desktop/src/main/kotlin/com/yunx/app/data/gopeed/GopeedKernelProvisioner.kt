@@ -94,6 +94,11 @@ object GopeedKernelProvisioner {
      * @param mirrorPrefix 调用方指定的镜像前缀；null/空走 GitHubMirror 自动选最快（或用户固定）
      */
     suspend fun resolvePlan(mirrorPrefix: String?): Plan = withContext(Dispatchers.IO) {
+        // [macOS 移植] Gopeed 官方内核是 Windows exe，非 Windows 系统直接报不可用，
+        // 界面会提示改用内置下载器；核心下载走内置 Kotlin 分片下载器，不依赖 Gopeed。
+        if (!System.getProperty("os.name").orEmpty().lowercase().contains("win")) {
+            throw IllegalStateException("Gopeed 引擎仅支持 Windows（官方内核为 gopeed.exe），当前系统不可用，请使用内置下载器")
+        }
         val mirror = mirrorPrefix?.takeIf { it.isNotBlank() } ?: GitHubMirror.activePrefix()
         val json = fetchLatestJson()
         val tag = json.optString("tag_name")
