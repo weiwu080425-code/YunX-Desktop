@@ -277,7 +277,7 @@ struct DownloadStatusView: View {
             if let error = item.errorText {
                 Text(error)
                     .font(.footnote)
-                    .foregroundStyle(error == "已取消" ? .secondary : .red)
+                    .foregroundStyle(error == "已取消" ? Color.secondary : Color.red)
             } else if item.finishedURL != nil {
                 Text("已下载")
                     .font(.footnote)
