@@ -77,6 +77,10 @@ object WindowsFilePicker {
         runCatching { Native.load("shell32", Shell32Ex::class.java) }.getOrNull()
     }
 
+    /** [macOS 移植] COM 对话框仅 Windows 可用；非 Windows 返回 Unavailable 让调用方回退 AWT 对话框 */
+    private fun isWindowsPlatform(): Boolean =
+        System.getProperty("os.name").orEmpty().lowercase().contains("win")
+
     /**
      * 打开原生「选择文件」对话框。
      * @param initialDir 初始定位目录（null 用系统记忆位置）
@@ -87,7 +91,7 @@ object WindowsFilePicker {
         initialDir: File?,
         title: String,
         filters: List<Pair<String, String>> = emptyList()
-    ): Result = showDialog(
+    ): Result = if (!isWindowsPlatform()) Result.Unavailable else showDialog(
         clsid = CLSID_FILE_OPEN_DIALOG,
         iid = IID_I_FILE_OPEN_DIALOG,
         title = title,
@@ -112,7 +116,7 @@ object WindowsFilePicker {
         title: String,
         filters: List<Pair<String, String>> = emptyList(),
         defaultExtension: String? = null
-    ): Result = showDialog(
+    ): Result = if (!isWindowsPlatform()) Result.Unavailable else showDialog(
         clsid = CLSID_FILE_SAVE_DIALOG,
         iid = IID_I_FILE_SAVE_DIALOG,
         title = title,
