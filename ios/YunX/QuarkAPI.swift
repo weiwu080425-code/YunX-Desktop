@@ -226,14 +226,12 @@ final class QuarkAPI {
 
     // MARK: - 分享解析
 
-    /// 创建分享会话：从文案提取短码/提取码 → 换 stoken（对应 Kotlin QuarkResolveRepository.createSession）
-    func createSession(linkText: String, pwdOverride: String?) async throws -> ShareSession {
-        guard let parsed = ShareLinkParser.parseQuark(linkText) else {
-            throw QuarkError("无法识别分享链接")
-        }
+    /// 创建分享会话：短码/提取码由 ShareLinkParser 解析好传入 → 换 stoken
+    /// （对应 Kotlin QuarkResolveRepository.createSession）
+    func createSession(parsed: ShareLinkParser.ParsedShare, pwdOverride: String?) async throws -> ShareSession {
         let pwd = (pwdOverride != nil && !pwdOverride!.isEmpty) ? pwdOverride : parsed.pwd
         let token = try await getShareToken(shareId: parsed.shareId, pwd: pwd, cookie: CookieStore.shared.cookie)
-        return ShareSession(shareId: parsed.shareId, stoken: token.stoken, title: token.title)
+        return ShareSession(shareId: parsed.shareId, stoken: token.stoken, title: token.title, platform: .quark)
     }
 
     /// 4.1 获取分享 Token（对应 Kotlin getShareToken）
