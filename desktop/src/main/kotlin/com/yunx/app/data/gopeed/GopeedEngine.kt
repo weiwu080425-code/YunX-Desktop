@@ -202,6 +202,10 @@ object GopeedEngine {
      * @return HTTP API 端口
      */
     fun start(downloadDir: File): Int {
+        // [macOS 移植] 内核是 Windows exe，非 Windows 系统明确报不可用（不尝试拉起进程）
+        if (!System.getProperty("os.name").orEmpty().lowercase().contains("win")) {
+            throw IllegalStateException("Gopeed 引擎仅支持 Windows，当前系统不可用，请使用内置下载器")
+        }
         if (_state.value == State.RUNNING) return port
         val exe = exeFile()
         if (!exe.isFile) throw IllegalStateException("还没有导入 Gopeed 内核（缺少 ${exe.absolutePath}）")
