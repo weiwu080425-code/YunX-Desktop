@@ -1,0 +1,61 @@
+name: Build iOS (unsigned IPA)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios-port]
+
+permissions:
+  contents: write
+
+jobs:
+  build-ios:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Build app (unsigned)
+        working-directory: ios
+        run: |
+          xcodebuild \
+            -project YunX.xcodeproj \
+            -scheme YunX \
+            -sdk iphoneos \
+            -configuration Release \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Package unsigned IPA
+        working-directory: ios
+        run: |
+          APP_PATH=build/DerivedData/Build/Products/Release-iphoneos/YunX.app
+          test -d "$APP_PATH"
+          rm -rf Payload YunX-iOS.ipa
+          mkdir Payload
+          cp -R "$APP_PATH" Payload/
+          zip -qry YunX-iOS.ipa Payload
+          ls -lh YunX-iOS.ipa
+
+      - name: Publish release with IPA
+        working-directory: ios
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="ios-build-${{ github.run_number }}"
+          gh release create "$TAG" \
+            --title "YunX iOS build ${{ github.run_number }}" \
+            --notes "Unsigned IPA of YunX for iOS (branch ios-port, folder ios/). Sideload with SideStore or AltStore." \
+            YunX-iOS.ipa \
+          || gh release upload "$TAG" YunX-iOS.ipa --clobber
