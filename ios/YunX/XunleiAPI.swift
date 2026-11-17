@@ -88,8 +88,8 @@ if let cached = cached { return cached}
 let defaults = UserDefaults.standard
 if let id = defaults.string(forKey: keyId),!id.isEmpty {
 let value = (id,
-defaults.string(forKey: keyPeer)?? XunleiConstants.peerIdFallback,
-defaults.string(forKey: keySign)?? XunleiConstants.deviceSignFallback)
+defaults.string(forKey: keyPeer) ?? XunleiConstants.peerIdFallback,
+defaults.string(forKey: keySign) ?? XunleiConstants.deviceSignFallback)
 cached = value
 return value
 }
@@ -195,7 +195,7 @@ var text = raw.trimmingCharacters(in:.whitespacesAndNewlines)
 if text.isEmpty { return nil}
 if let unwrapped = unwrapQuoted(text) { text = unwrapped.trimmingCharacters(in:.whitespacesAndNewlines)}
 if text.isEmpty { return nil}
-if!text.hasPrefix("{") { return parseRawToken(text)}
+if !text.hasPrefix("{") { return parseRawToken(text)}
 guard let root = parseObject(text) else { return nil}
 return fieldsFrom(toFieldMap(unwrapNested(root)))
 }
@@ -214,15 +214,15 @@ captchaToken: "", userId: "", nickname: "")
 static func fieldsFrom(_ fields: [String: String]) -> XunleiWebTokens? {
 let access = pick(fields, "access_token", "accessToken")
 let refresh = pick(fields, "refresh_token", "refreshToken")
-if!access.isEmpty &&!isValidToken(access) { return nil}
-if!refresh.isEmpty &&!isValidToken(refresh) { return nil}
+if !access.isEmpty && !isValidToken(access) { return nil}
+if !refresh.isEmpty && !isValidToken(refresh) { return nil}
 if access.isEmpty && refresh.isEmpty { return nil}
 let captcha = pick(fields, "captcha_token", "captchaToken")
 return XunleiWebTokens(
 accessToken: access,
 refreshToken: refresh,
 deviceId: pick(fields, "device_id", "deviceId"),
-captchaToken: isValidToken(captcha)? captcha: "",
+captchaToken: isValidToken(captcha) ? captcha : "",
 userId: pick(fields, "user_id", "userId", "sub"),
 nickname: pick(fields, "nick_name", "nickname", "name", "user_name")
 )
@@ -231,7 +231,7 @@ nickname: pick(fields, "nick_name", "nickname", "name", "user_name")
 /// token 合法性：长度 16~16384、仅 JWT/Base64 字符集、且不是 "null"/"undefined"
 static func isValidToken(_ value: String) -> Bool {
 guard value.count >= 16 && value.count <= 16384 else { return false}
-guard value!= "null" && value!= "undefined" else { return false}
+guard value != "null" && value != "undefined" else { return false}
 return value.allSatisfy { c in
 c.isLetter || c.isNumber || "._~+/=-".contains(c)
 } && value.unicodeScalars.allSatisfy { $0.isASCII}
@@ -272,8 +272,8 @@ return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
 private static func unwrapNested(_ root: [String: Any]) -> [String: Any] {
 var current = root
 for _ in 0..<2 {
-if current["access_token"]!= nil || current["accessToken"]!= nil ||
-current["refresh_token"]!= nil || current["refreshToken"]!= nil {
+if current["access_token"] != nil || current["accessToken"] != nil ||
+current["refresh_token"] != nil || current["refreshToken"] != nil {
 return current
 }
 guard let nested = (current["credentials"] as? [String: Any])
@@ -287,7 +287,7 @@ return current
 /// 取第一个非空字符串字段（含控制字符的值跳过）
 private static func pick(_ fields: [String: String], _ keys: String...) -> String {
 for key in keys {
-let text = (fields[key]?? "").trimmingCharacters(in:.whitespacesAndNewlines)
+let text = (fields[key] ?? "").trimmingCharacters(in:.whitespacesAndNewlines)
 if text.isEmpty { continue}
 if text.unicodeScalars.contains(where: { $0.value < 0x20 || $0.value == 0x7f}) { continue}
 return text
@@ -333,7 +333,7 @@ return t.trimmingCharacters(in:.whitespacesAndNewlines)
 static func looksLikeKouling(_ text: String) -> Bool {
 let t = normalize(text)
 if t.isEmpty || t.count > maxLength { return false}
-if!t.allSatisfy({ $0.isLetter || $0.isNumber}) { return false}
+if !t.allSatisfy({ $0.isLetter || $0.isNumber}) { return false}
 return t.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF}
 }
 
@@ -976,7 +976,7 @@ extension XunleiAPI {
             return (accessToken, refreshToken)
         }
         if !refreshToken.isEmpty,
-           let pair = await refreshToken(refreshToken: refreshToken, deviceId: deviceId, authType: authType) {
+           let pair = await self.refreshToken(refreshToken: refreshToken, deviceId: deviceId, authType: authType) {
             return (pair.access, pair.refresh.isEmpty ? refreshToken : pair.refresh)
         }
         throw Wave2Error("迅雷登录已过期，请重新登录")
@@ -1075,7 +1075,7 @@ extension XunleiAPI {
                   captchaToken: String, pageToken: String = "") async throws -> XunleiShareResult {
         let url = "\(XunleiConstants.shareURL)?share_id=\(shareId)&pass_code=\(wFormEncode(passCode))&limit=100&page_token=\(wFormEncode(pageToken))&thumbnail_size=SIZE_SMALL"
         let build: (String) -> URLRequest = { t in
-            panRequest(url: url, accessToken: accessToken, deviceId: deviceId, captchaToken: t)
+            self.panRequest(url: url, accessToken: accessToken, deviceId: deviceId, captchaToken: t)
         }
         let parse: ([String: Any]) throws -> XunleiShareResult = { data in
             // 提取码状态：files 为空且 HTTP 200，不识别会被误判为「此目录为空」
@@ -1087,7 +1087,7 @@ extension XunleiAPI {
             }
             return XunleiShareResult(
                 title: data.wStr("title"),
-                files: parseFileArray(data.wObjs("files")),
+                files: self.parseFileArray(data.wObjs("files")),
                 passCodeToken: data.wStr("pass_code_token"),
                 shareId: shareId,
                 nextPageToken: data.wStr("next_page_token")
@@ -1107,10 +1107,10 @@ extension XunleiAPI {
                         pageToken: String = "") async throws -> XunleiFilePage {
         let url = "\(XunleiConstants.shareDetailURL)?share_id=\(shareId)&parent_id=\(parentId)&pass_code_token=\(wFormEncode(passCodeToken))&limit=100&page_token=\(wFormEncode(pageToken))&thumbnail_size=SIZE_SMALL"
         let build: (String) -> URLRequest = { t in
-            panRequest(url: url, accessToken: accessToken, deviceId: deviceId, captchaToken: t)
+            self.panRequest(url: url, accessToken: accessToken, deviceId: deviceId, captchaToken: t)
         }
         let parse: ([String: Any]) -> XunleiFilePage = { data in
-            XunleiFilePage(files: parseFileArray(data.wObjs("files")),
+            XunleiFilePage(files: self.parseFileArray(data.wObjs("files")),
                            nextPageToken: data.wStr("next_page_token"))
         }
         if accessToken.isEmpty {
