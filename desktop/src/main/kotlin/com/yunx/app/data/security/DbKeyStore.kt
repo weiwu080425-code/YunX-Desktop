@@ -34,8 +34,18 @@ enum class DbEncryptionLevel(val id: String, val label: String) {
     STRICT("strict", "较为严格"),
     STRICTEST("strictest", "严格");
 
-    /** 该档位在当前系统上是否可用（严格档需要 SQLCipher 原生库，暂未支持） */
-    val isSupported: Boolean get() = this != STRICTEST
+    /**
+     * 该档位在当前系统上是否可用：
+     * - 严格档（STRICTEST）需要 SQLCipher 原生库，暂未支持；
+     * - [macOS 移植] 较为严格档（STRICT）依赖 Windows DPAPI，非 Windows 系统上不可用，
+     *   设置页据此禁用该档、切档会被 switchLevel 拦下，不会在运行时才抛错。
+     */
+    val isSupported: Boolean
+        get() = when (this) {
+            STRICTEST -> false
+            STRICT -> System.getProperty("os.name").orEmpty().lowercase().contains("win")
+            else -> true
+        }
 
     /** 密钥是否绑定本机（换机器后凭证将无法解密，需重新登录） */
     val isMachineBound: Boolean get() = this == NORMAL || this == STRICT
@@ -212,16 +222,55 @@ object DbKeyStore {
         append(System.getProperty("os.arch").orEmpty()).append('|')
         append(
             machineGuid() ?: throw MachineFingerprintUnavailable(
-                "暂时读不到 MachineGuid，本次不做密钥解包（下次会重试）"
+                // Windows 上是 MachineGuid、非 Windows 上是 ~/.yunx/machine-id，统称机器标识
+                "暂时读不到机器标识（MachineGuid / machine-id），本次不做密钥解包（下次会重试）"
             )
         )
     }
 
     /** Windows MachineGuid（HKLM\SOFTWARE\Microsoft\Cryptography），普通用户可读 */
-    private fun machineGuid(): String? = runCatching {
-        Advapi32Util.registryGetStringValue(
-            WinReg.HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Cryptography", "MachineGuid"
-        ).takeIf { it.isNotBlank() }
+    private fun machineGuid(): String? {
+        if (isWindows()) {
+            return runCatching {
+                Advapi32Util.registryGetStringValue(
+                    WinReg.HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Cryptography", "MachineGuid"
+                ).takeIf { it.isNotBlank() }
+            }.getOrNull()
+        }
+        // [macOS 移植] 非 Windows 没有 MachineGuid 注册表项，改用本地机器标识文件（见下）。
+        return localMachineId()
+    }
+
+    /**
+     * [macOS 移植] 非 Windows 的机器标识：`~/.yunx/machine-id`。
+     *
+     * 首次运行时生成一个随机 UUID 落盘，之后每次读回同一值，作为普通档 PBKDF2 的
+     * 机器指纹来源（与 Windows 上 MachineGuid 的角色一致：稳定、本机唯一）。
+     * 文件权限尽量收紧到仅属主可读写（POSIX 0600；非 POSIX 文件系统退化为
+     * java.io.File 的属主权限设置）。文件丢失/被删后指纹会变、旧包裹密钥将无法
+     * 解开（与 Windows 上重装系统丢 MachineGuid 的后果等价），调用方逻辑不变。
+     */
+    private fun localMachineId(): String? = runCatching {
+        val dir = File(System.getProperty("user.home").orEmpty(), ".yunx")
+        val file = File(dir, "machine-id")
+        val existing = if (file.isFile) file.readText().trim() else ""
+        if (existing.isNotBlank()) return@runCatching existing
+        dir.mkdirs()
+        val fresh = java.util.UUID.randomUUID().toString()
+        file.writeText(fresh)
+        runCatching {
+            val posix = java.nio.file.FileSystems.getDefault().supportedFileAttributeViews()
+            if (posix.contains("posix")) {
+                Files.setPosixFilePermissions(
+                    file.toPath(),
+                    java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")
+                )
+            } else {
+                file.setReadable(false, false); file.setReadable(true, true)
+                file.setWritable(false, false); file.setWritable(true, true)
+            }
+        }
+        fresh
     }.getOrNull()
 
     /** 较为严格档：Windows DPAPI（CryptProtectData，绑定当前登录用户） */
