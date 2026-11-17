@@ -1,0 +1,59 @@
+name: Build macOS (arm64)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [mac-port]
+
+permissions:
+  contents: write
+
+jobs:
+  build-mac:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Build distributable and dmg
+        run: |
+          chmod +x gradlew
+          ./gradlew :desktop:createDistributable :desktop:packageDmg --no-daemon --stacktrace
+
+      - name: List build outputs
+        if: always()
+        run: |
+          find desktop/build/compose/binaries -maxdepth 4 -print || true
+
+      - name: Upload dmg
+        uses: actions/upload-artifact@v4
+        with:
+          name: YunX-Desktop-mac-dmg
+          path: desktop/build/compose/binaries/main/dmg/*.dmg
+          if-no-files-found: warn
+
+      - name: Upload app
+        uses: actions/upload-artifact@v4
+        with:
+          name: YunX-Desktop-mac-app
+          path: desktop/build/compose/binaries/main/app/**
+          if-no-files-found: warn
+
+      - name: Publish release with dmg and app zip
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          APP_PATH=$(find desktop/build/compose/binaries/main/app -maxdepth 1 -name '*.app' | head -1)
+          echo "App bundle: $APP_PATH"
+          ditto -c -k --keepParent "$APP_PATH" YunX-Desktop-mac-app.zip
+          ls -lh desktop/build/compose/binaries/main/dmg/ YunX-Desktop-mac-app.zip
+          gh release create "mac-build-${{ github.run_number }}" \
+            --title "YunX-Desktop macOS build ${{ github.run_number }}" \
+            --notes "macOS arm64 build of the Mac port (branch mac-port). Unsigned: first launch needs right-click -> Open." \
+            desktop/build/compose/binaries/main/dmg/*.dmg YunX-Desktop-mac-app.zip
