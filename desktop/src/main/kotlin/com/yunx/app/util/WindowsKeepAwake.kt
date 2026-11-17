@@ -26,7 +26,12 @@ object WindowsKeepAwake {
     private val executor = Executors.newSingleThreadExecutor { r -> Thread(r, "yunx-keep-awake") }
     private val refs = AtomicInteger(0)
 
+    /** [macOS 移植] SetThreadExecutionState 是 Windows 专属 API，非 Windows 直接跳过（不加载 kernel32） */
+    private fun isWindows(): Boolean =
+        System.getProperty("os.name").orEmpty().lowercase().contains("win")
+
     fun acquire() {
+        if (!isWindows()) return
         if (refs.getAndIncrement() == 0) {
             executor.execute {
                 runCatching { Kernel32.INSTANCE.SetThreadExecutionState(ES_CONTINUOUS or ES_SYSTEM_REQUIRED) }
@@ -35,6 +40,7 @@ object WindowsKeepAwake {
     }
 
     fun release() {
+        if (!isWindows()) return
         if (refs.decrementAndGet() <= 0) {
             refs.set(0)
             executor.execute {
