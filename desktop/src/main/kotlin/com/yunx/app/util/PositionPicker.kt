@@ -41,6 +41,8 @@ object PositionPicker {
         colorRgb: Int,
         reduceMotion: Boolean
     ): Position? {
+        // [macOS 移植] 遮罩选位器是 Windows exe，非 Windows 直接返回 null（调用方按「取消」处理）
+        if (!System.getProperty("os.name").orEmpty().lowercase().contains("win")) return null
         val resolved = resolveExe()
         if (resolved == null) {
             Log.w(TAG, "未找到 $EXE_NAME，无法设置主窗口位置（jar 内 yunx/$EXE_NAME 资源缺失，且开发态 build\\ 下也没有）")
