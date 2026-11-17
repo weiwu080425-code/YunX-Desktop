@@ -93,6 +93,7 @@ final class ResolveViewModel: ObservableObject {
                 DownloadCenter.shared.start(
                     urlString: link.downloadUrl,
                     filename: link.filename.isEmpty ? file.fname : link.filename,
+                    fileKey: file.id,
                     headers: headers
                 ) {
                     // 下载完成才删临时转存子目录（下载期间 fid 必须存活）；失败静默
@@ -115,7 +116,7 @@ final class ResolveViewModel: ObservableObject {
 
 struct ResolveView: View {
     @StateObject private var model = ResolveViewModel()
-    @ObservedObject private var downloads = DownloadCenter.shared
+    @State private var showSettings = false
 
     var body: some View {
         NavigationStack {
@@ -132,7 +133,7 @@ struct ResolveView: View {
                     }
                     .disabled(model.isParsing || model.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     if model.isGuest {
-                        Text("未设置 Cookie：当前是游客模式，只能下载约 50MB 以内的小文件。去「设置」页粘贴 Cookie 后可下大文件。")
+                        Text("未设置 Cookie：当前是游客模式，只能下载约 50MB 以内的小文件。点右上角齿轮按钮粘贴 Cookie 后可下大文件。")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -166,16 +167,20 @@ struct ResolveView: View {
                         Text(model.shareTitle.isEmpty ? "文件列表" : model.shareTitle)
                     }
                 }
-
-                if !downloads.items.isEmpty {
-                    Section("下载") {
-                        ForEach(downloads.items) { item in
-                            DownloadRow(item: item)
-                        }
+            }
+            .navigationTitle("云析 · 夸克解析")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
                     }
                 }
             }
-            .navigationTitle("云析 · 夸克解析")
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
+            }
         }
     }
 
@@ -208,48 +213,75 @@ struct ResolveView: View {
                 }
             }
         } else {
-            HStack {
-                Image(systemName: "doc").foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(file.fname)
-                    Text(formatBytes(file.fsize))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                if model.busyFileId == file.id {
-                    ProgressView()
-                } else {
-                    Button("下载") { model.download(file) }
-                        .buttonStyle(.bordered)
-                }
+            FileRowView(file: file, isBusy: model.busyFileId == file.id) {
+                model.download(file)
             }
         }
     }
 }
 
-/// 下载列表里的一行：进度 / 完成后的导出按钮 / 错误提示
-struct DownloadRow: View {
+/// 文件行：下载状态（进度 / 完成 / 失败）就地显示在这一行里，全应用没有单独的下载页面。
+struct FileRowView: View {
+    let file: ShareFile
+    let isBusy: Bool
+    let onDownload: () -> Void
+
+    @ObservedObject private var downloads = DownloadCenter.shared
+
+    private var item: DownloadItem? {
+        downloads.items.first { $0.fileKey == file.id }
+    }
+
+    var body: some View {
+        HStack(alignment: .top) {
+            Image(systemName: "doc").foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(file.fname)
+                Text(formatBytes(file.fsize))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                if let item {
+                    DownloadStatusView(item: item)
+                }
+            }
+            Spacer()
+            trailing
+        }
+    }
+
+    @ViewBuilder
+    private var trailing: some View {
+        if isBusy {
+            ProgressView()
+        } else if let item, item.finishedURL != nil {
+            ShareLink(item: item.finishedURL!) {
+                Text("导出")
+            }
+            .font(.footnote)
+        } else if let item, item.errorText == nil {
+            // 正在下载：进度在行内显示，右侧不再放按钮
+            EmptyView()
+        } else {
+            Button("下载") { onDownload() }
+                .buttonStyle(.bordered)
+        }
+    }
+}
+
+/// 行内下载状态：观察单个任务，进度实时刷新。
+struct DownloadStatusView: View {
     @ObservedObject var item: DownloadItem
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(item.filename).lineLimit(1)
+        VStack(alignment: .leading, spacing: 2) {
             if let error = item.errorText {
                 Text(error)
                     .font(.footnote)
-                    .foregroundStyle(.red)
-            } else if let url = item.finishedURL {
-                HStack {
-                    Text("已下载")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    ShareLink(item: url) {
-                        Text("导出到「文件」")
-                    }
+                    .foregroundStyle(error == "已取消" ? .secondary : .red)
+            } else if item.finishedURL != nil {
+                Text("已下载")
                     .font(.footnote)
-                }
+                    .foregroundStyle(.secondary)
             } else {
                 if item.progress >= 0 {
                     ProgressView(value: item.progress)
