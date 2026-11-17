@@ -4,6 +4,8 @@ import Foundation
 final class DownloadItem: ObservableObject, Identifiable {
     let id = UUID()
     let filename: String
+    /// 发起下载的分享文件 id，文件行靠它就地显示本文件的下载状态
+    let fileKey: String
     /// 进度 0...1；-1 表示服务端未给出总大小
     @Published var progress: Double = 0
     @Published var received: Int64 = 0
@@ -16,8 +18,9 @@ final class DownloadItem: ObservableObject, Identifiable {
     var cleanup: (() -> Void)?
     var task: URLSessionDownloadTask?
 
-    init(filename: String) {
+    init(filename: String, fileKey: String) {
         self.filename = filename
+        self.fileKey = fileKey
     }
 }
 
@@ -29,6 +32,13 @@ final class DownloadCenter: NSObject, ObservableObject {
     static let shared = DownloadCenter()
 
     @Published var items: [DownloadItem] = []
+    /// 状态代号：单个任务内部的变化不会触发中心的订阅者重渲染，
+    /// 任务完成/失败时 bump 一次，文件行据此切换按钮（下载 ↔ 导出）。
+    @Published var revision = 0
+
+    func touch() {
+        DispatchQueue.main.async { self.revision += 1 }
+    }
 
     private var session: URLSession!
     private var itemsByTaskId: [Int: DownloadItem] = [:]
@@ -43,11 +53,11 @@ final class DownloadCenter: NSObject, ObservableObject {
     }
 
     /// 开始一个下载。headers 必须包含取链同款的 Cookie / User-Agent / Referer。
-    func start(urlString: String, filename: String, headers: [String: String], cleanup: (() -> Void)? = nil) {
+    func start(urlString: String, filename: String, fileKey: String, headers: [String: String], cleanup: (() -> Void)? = nil) {
         guard let url = URL(string: urlString) else { return }
         var req = URLRequest(url: url)
         for (key, value) in headers { req.setValue(value, forHTTPHeaderField: key) }
-        let item = DownloadItem(filename: filename)
+        let item = DownloadItem(filename: filename, fileKey: fileKey)
         item.cleanup = cleanup
         let task = session.downloadTask(with: req)
         item.task = task
@@ -107,6 +117,7 @@ extension DownloadCenter: URLSessionDownloadDelegate {
             DispatchQueue.main.async {
                 item.errorText = "下载失败（HTTP \(http.statusCode)），直链可能已过期，请重新点下载"
             }
+            touch()
             return
         }
         // location 指向的临时文件在本回调返回后会被系统删除，必须同步移动
@@ -117,6 +128,7 @@ extension DownloadCenter: URLSessionDownloadDelegate {
             }
             try FileManager.default.moveItem(at: location, to: dest)
             DispatchQueue.main.async { item.finishedURL = dest }
+            touch()
             let cleanup = item.cleanup
             item.cleanup = nil
             cleanup?()
@@ -124,6 +136,7 @@ extension DownloadCenter: URLSessionDownloadDelegate {
             DispatchQueue.main.async {
                 item.errorText = "保存文件失败：\(error.localizedDescription)"
             }
+            touch()
         }
     }
 
@@ -139,5 +152,6 @@ extension DownloadCenter: URLSessionDownloadDelegate {
                 DispatchQueue.main.async { item.errorText = error.localizedDescription }
             }
         }
+        touch()
     }
 }
